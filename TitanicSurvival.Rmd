@@ -1,0 +1,281 @@
+---
+title: "Titanic Survival"
+author: "William Duquette"
+date: "Due on Sunday, May 10 at 11:59PM"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
+```
+
+```{r, echo=FALSE, include=FALSE}
+require(car)
+require(ggplot2)
+require(tidyverse)
+require(EnvStats)
+require(MASS)
+library(MuMIn)
+require(gridExtra)
+require(Hmisc)
+library(expss)
+library(ResourceSelection)
+library(pscl)
+library(naniar)
+library(tidyr)
+```
+
+```{r}
+Titanic<-read.csv("Titanic.csv")
+
+Titanic$Embarked=factor(Titanic$Embarked, levels=c("C","Q","S"), labels=c("Cherbourg", "Queenstown", "Southampton"))
+Titanic$Pclass=factor(Titanic$Pclass, levels=c("1","2","3"), labels=c("Upper","Middle", "Lower"))
+
+Titanic$Pclass=as.factor(Titanic$Pclass)
+Titanic$sibsp=as.numeric(Titanic$sibsp)
+Titanic$parch=as.numeric(Titanic$parch)
+
+Titanic2=Titanic
+Titanic2$Fare=log(Titanic$Fare+1)
+
+```
+
+Project Description: In 1912, the Titanic attempted to sail across the Atlantic Ocean fro England to the New York. It was hailed as a wonder of engineering and was thought to be unsinkable. Before it could reach New York it struck and ice berg, and thousands of people died. It remains one of the most infamous sinking of all time, a sinking in which many people perished. The data that is being used in this study was gathered from the manifest of the Titanic, and other contemporaneous records. I will build a model that will predict which factors increase and decrease the odds of a passenger surviving. 
+
+
+Relevant Variables: There are 9 variables that are inside the data set. For this question, Survived will be the response variable. This variable, Survived, is an indication of whether the passenger survived or not (see Exploratory Data Analysis). The explanatory variables (before possible transformations) that could possibly be included in the model are listed below:
+
+
+1. PassengerID - This identification variable was a unique identification number that was given to each passenger.  
+
+2. Pclass - This categorical variable denotes the class of the passenger. This could be used as a stand in for socioeconomic standing, due to the price difference of tickets. The three possible classes are: 1 (upper class), 2 (middle class), 3 (lower class). Below is a graph that shows the distribution of the explanatory variable. As you can see there are significantly more passengers in third class than any other class, while there is only a difference of 32 passengers between first and second class.
+
+```{r}
+Pclassbar<-ggplot(Titanic, aes(x=Pclass, fill=Pclass))+geom_bar()+labs(title="Distribution of Pclass", x="Class of Passenger")
+
+Pclassbar+guides(fill=guide_legend(title="Ticket Class"))
+```
+
+3. Sex - This categorical variables denotes the sex of the passenger. In this case, the possible genders are male and female. Below is a graph that shows the distribution of the explanatory variable. As you can see there are significantly more male passengers than female passengers. 
+
+```{r}
+ggplot(Titanic, aes(x=Sex, fill=Sex))+geom_bar()+labs(title="Distribution of Sex", x="Sex of Passenger")
+```
+
+
+4. Age - This variable measures the age of the passenger. Below is a graph that shows the distribution of the explanatory variable. As you can see the distribution of age is roughly normal. 
+
+```{r, message=FALSE}
+Agehist<-ggplot(Titanic, aes(x=Age, fill=Sex))+geom_histogram()+labs(title="Distribution of Age", x="Age of Passenger")
+Agehist+facet_grid(~Sex)
+```
+
+
+5. sibsp - This variable measures the number of siblings or spouses a passenger had aboard. Below is a graph that shows the distribution of the explanotory. As you can see this variable is skewed right, but this distribution makes sense given that a large amount of the passengers on board were young men who are less like to have spouses or their siblings traveling with them.
+
+```{r, message=FALSE}
+sibsphist<-ggplot(Titanic, aes(x=sibsp, fill=Sex))+geom_histogram()+labs(title="Distribution of sibsp", x="Number of Siblings or Spouses Passenger had Aboard")
+sibsphist+facet_grid(~Sex)
+
+ggplot(Titanic, aes(x=sibsp, y=Age, col=Sex))+geom_point()
+```
+
+
+6. parch - This variable measures the number of parents or children the passenger had aboad. Below is a graph that shows the distribution of the explanatory variable. This distribution of this variable is skewed right, but again this distribution makes sense because a large portion of the ship's population was young men who are less likely to have kids or their parents traveling with them.
+
+
+```{r, message=FALSE}
+
+parchhist<-ggplot(Titanic, aes(x=parch, fill=Sex))+geom_histogram()+labs(title="Distribution of parch", x="Number of Parents or Children passenger had Aboard")
+parchhist+facet_grid(~Sex)
+
+```
+
+
+7. Fare - This variable measures the cost of the fare. Below is a graph that shows the distribution of the explanotory variable. I have applied the log() transformation to this variable (see Exploratory Data Analysis). 
+
+```{r}
+ggplot(Titanic, aes(x=Fare))+geom_histogram(fill="deepskyblue")+labs(title="Distribution of Fare", x="Cost of Fare")
+```
+
+
+8. Embarked - This categorical variable denotes where the passenger embarked from. The three possible locations to embark are Cherbourg, Queenstown, and Southampton. Below is a graph that shows the distribution of the explanotory variable. As you can see the most passengers embarked the Titanic at Southampton. 
+
+```{r}
+Embarkedbar<-ggplot(NULL, aes(x=na.omit(Titanic$Embarked), fill=na.omit(Titanic$Embarked)))+geom_bar()+labs(title="Distribution of Embarked", x="The Location Passenger Embarked From")
+
+Embarkedbar+guides(fill=guide_legend(title="Embarked"))
+```
+
+
+Exploratory Data Analysis: This first graph shown is a bar graph that shows the distribution of the response variable: Survived. Survived is a categorical variable that indicates whether a passenger lived or died. The second set of graphs, which uses the original data set, are the graphs that show each possible explanatory variable's relationship to the response variable (Survived). As you can see *Fare* needs to be transformed (see below). A few things that are worth noting is the graph of "Survived (Separated by Class)" and "Survived (Separated by Sex)." Something to note on the "Survived (Separated by Class)" graph is that significantly more lower class people died rather than survived, compared to higher class passengers where more survived rather than died. With the "Survived (Separated by Sex)" graph it should be noted that significantly more men died than survived. However, more women survived than died. This points to societal views on class and gender that will be addressed in the conclusion section.
+
+```{r}
+Titanictemp=subset(Titanic, is.na(Embarked)==FALSE)
+
+ggplot(Titanic, aes(x=Survived))+geom_bar(fill="deepskyblue")+labs(title = "Distribution of response variable: Survived")
+
+
+survivedbar1<-ggplot(Titanic, aes(x=Survived, fill=Pclass))+geom_bar()+labs(title = "Survived (Separated by Class)")
+survivedbar1+facet_grid(~Pclass)+guides(fill=guide_legend(title="Ticket Class"))
+
+
+survivedbar2<-ggplot(Titanic, aes(x=Survived, fill=Sex))+geom_bar()+labs(title = "Survived (Separated by Sex)")
+survivedbar2+facet_grid(~Sex)
+
+ggplot(Titanic, aes(y=Age, x=Survived, fill=Survived))+geom_boxplot()+labs(title = "Survived vs. Age")+coord_flip()
+
+ggplot(Titanic, aes(y=sibsp, x=Survived, fill=Survived))+geom_boxplot()+labs(title= "Survied vs. sibsp")+coord_flip()
+
+ggplot(Titanic, aes(y=parch, x=Survived, fill=Survived))+geom_boxplot()+labs(title="Survived vs. parch")+coord_flip()
+
+ggplot(Titanic, aes(y=Fare, x=Survived, fill=Survived))+geom_boxplot()+labs(title="Survived vs. Fare")+coord_flip()
+
+survivedbar3<-ggplot(Titanictemp, aes(x=Survived, fill=Embarked))+geom_bar()+labs(title = "Survived (Separated by Embarked)")
+survivedbar3+facet_grid(~Embarked)+guides(fill=guide_legend(title="Embarked"))
+
+
+```
+
+Below you can see the analysis done on *Fare* to see what transformation is necessary. The transformation that was used was log(). This transformation was used because the distribution of fare covered several orders of magnitude. As you can see in the before graph, most people paid close to zero for their fare, while a few passengers paid over 500 for their fare. In the graph titled after, you can see that after the transformation fare is more evenly distributed.
+
+```{r}
+# Checking Fare
+
+Before<-ggplot(Titanic, aes(y=Fare, x=Survived, fill=Survived))+geom_boxplot()+labs(title="Before", y="Cost of Fare")+coord_flip()
+After<-ggplot(Titanic2, aes(y=Fare, x=Survived, fill=Survived))+geom_boxplot()+labs(title="After", y="Cost of Fare")+coord_flip()
+
+grid.arrange(Before, After, ncol=2)
+```
+
+
+Results: I have found two interaction terms that are statistically significant. An interaction term is a variable that is a function of the current explanatory variables. An interaction term is appropiate inside a model if one explanatory variable is dependent on another explanatory variable.
+
+```{r}
+# First Interaction Term
+
+mod.int.1<-glm(Survived~Pclass*Sex, data=Titanic2, family=binomial)
+summary(mod.int.1)
+```
+
+The above summary shows the coefficients of the model that shows the interaction term between Pclass and Sex. Given that both a Pclass and Sex are factor variables, I will use a table to best illustrate the significance of the interaction variable. The table below shows the decreasing odds that a passenger survived. This makes sense because it is well documented that higher class passengers, and upper class women in particular, were evacuated first. The horizontal columns show the passenger's class, and the vertical columns show the passengers sex. As you can see from this table, it is clear that the odds that a passenger survived decreases as the ticket classes lowered. Also it is clear that the affect of ticket class on the two genders was different.
+
+
+                                  Table 1
+                                  ------------------------------------------------------
+                                  |          |    Upper    |    Middle   |    Lower    |
+                                  ------------------------------------------------------
+                                  |  Male    |  98.07337%  |  99.38414%  |  99.48347%  |
+                                  ------------------------------------------------------
+                                  |  Female  |             |  61.53802%  |  96.70314%  |
+                                  ------------------------------------------------------
+                  
+
+
+
+
+For my second interaction term I found that there was an increased effect on a whether a passenger survived or not when both their age and sex was taken into account. For example, the older a male passenger was the higher chance he had of dying. You can see that in the graph of the male passengers that the males that died were older than the males who lived. 
+
+```{r, warning=FALSE}
+# Second Interaction Term
+ggplot(Titanic2, aes(y=Age, x=Survived, fill=Sex))+geom_boxplot()+coord_flip()
+mod.int.2<-glm(Survived~Sex*Age, data=Titanic, family=binomial)
+summary(mod.int.2)
+```
+
+The summary above shows the coefficients of a model that was used to analyze the significance of the interaction term between Sex and Age. 
+When the passenger is male an increase in age of 1 year will result in their odds of surviving decreasing by 2.119222%. This is compared to a female passenger where every year increase in age will result in their odds of surviving increasing by 1.989533%.
+
+
+
+For my third interaction term I found that there was increased affect on whether a passenger survived or not if the passenger was male and had kids or parents aboard. You can see from the graph that the males that survived had more kids or parents on board than the males that died.
+
+```{r}
+# Third interaction term
+
+ggplot(Titanic2, aes(y=parch, x=Survived, fill=Sex, col=Sex))+geom_boxplot()+coord_flip()
+
+mod.int.3<-glm(Survived~parch*Sex, data=Titanic2, family=binomial)
+summary(mod.int.3)
+```
+
+The summary above shows the coefficients of a model that was made to analyze the significance of the interaction term between Sex and parch. When the passenger is male an increase of 1 in the amount of parents or children brought aboard increased the odds of survival by 40.36837%. This is compared to a female passenger where every increase of 1 in the amount of parents or children brought aboard resulted in the odds of survival decreasing by 36.60594%.
+
+
+
+I used to backwards stepwise model selection to build my model, which is an algorithm that finds the best model for predicting the average evaluation score. Having the step function be in the backwards direction means that the model will start with all the variables and will remove variables as the algorithm sees fit. It compares the models that it produces using the AIC scores from each model; the lower the score the better.
+
+```{r}
+mod.full<-glm(Survived~.-PassengerID+Sex*Age+Pclass*Sex+Sex*parch, data=na.omit(Titanic2), family=binomial)
+mod.back<-step(mod.full, direction="backward", trace=0)
+summary(mod.back)
+
+vif(mod.back)
+```
+
+This is the model that was created from the stepwise algorithm. As you can see there are 5 explanatory variables. I have conducted a multicollinearity test, and as you can see there is no multicollinearity in this model given that all of the values from that test are less than 5, which is the generally accepted threshold. The estimate column shows how much the log(odds) would increase or decrease if the other variables are held constant. I have changed the estimates from log(odds) to odds to make them easier to interpret. Below is an explanation of each of the coefficient:
+
+
+Variable                        | Effect 
+--------------------------------|---------------------------------------------------------------------------------------------------------------
+`PclassMiddle` & `PclassLower`  | Refer to table 1
+`Sexmale`                       | Refer to to table 1,2 and 3
+`Age`                           | Refer to table 2
+`sibsp`                         | For every increase in 1 sibsp the odds of surviving decreased by 33.08962%.
+`parch`                         | Refer to table 3
+`PclassMiddle:SexMale`          | Refer to table 1
+`PclassLower:SexMale`           | Refer to table 1
+`SexMale:parch`                 | Refer to table 3
+
+
+
+
+
+
+When you make a logistic regression model there are certain assumptions that have to be made. The first assumption is that the response variable is binary; as you can see, Survived is a binary given that you can either live or die.The second assumption is that the variables are independent, which in this data set they are. Third, there cannot be any multicollinearity, which as you can see from the above summary there is not. The fourth assumption is that there is a linear relationship between the explanatory variables and the log of the odds, also known as logit; as you can you can see from the three graphs below there is a clear linear relationship between the log(odds) and the explanatory variables. The sample size for logistic regression needs to be sufficiently large. The equation used to test sample size is $n=50\cdot v/p$. In order for this model to be sufficiently large enough. In this case the value you get from that equation is 619, which is less than the 891 observations in the data set making this model sufficiently large. 
+
+```{r, include=FALSE}
+mod.final<-glm(Survived~Pclass+Sex+Age+sibsp+parch+Pclass*Sex+Sex*parch, data=Titanic2, family=binomial)
+summary(mod.final)
+```
+
+```{r}
+
+#Check for Linearity with Log-Odds
+probabilities = predict(mod.final, type = "response") # Change the model name from log1 to your model!
+predicted.classes <- ifelse(probabilities > 0.5, "pos", "neg")
+
+vars = c("Pclass","Sex","Age", "sibsp", "Fare") # Change these variables to your name!
+testdata = na.omit(Titanic2[vars]) #change birds to your dataset name! 
+
+# Select only numeric predictors
+data_num <- testdata %>%
+  dplyr::select_if(is.numeric) 
+predictors <- colnames(data_num)
+
+# Bind the logit and tidying the data for plot
+data_num <- data_num %>%
+  mutate(logit = log(probabilities/(1-probabilities))) %>%
+  gather(key = "predictors", value = "predictor.value", -logit)
+
+# Make the Scatter plots
+
+ggplot(data_num, aes(logit, predictor.value))+
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) + 
+  theme_bw() + 
+  facet_wrap(~predictors, scales = "free_y")
+```
+
+
+Discussion: Many of the problems that plague statistical studies do apply in this study. For example, the data was clean, except for a few minor fixes, and only one variable needed to be transformed. One problem that I would point out is that there is no variable that measures where the passengers room was located on the ship. Given that the ship hit the ice berg at close to midnight most people would have been in bed. A variable that measures where someone's room is located would be able to estimate how long it would take a passenger to get to the life boats. Given that some lower class passengers survived it would be useful to know if they survived only because they were closer to the life boats. What is alarming about this study is that gender played a large part in if the passenger would survive. For example if the passenger was male the odds that he survived decreased by 73.22633. On top of that, every 1 year older a man got the odds that he survived decreased by 2.119222, where as a woman's odds that she survived actually increased by 1.989533 for every 1 year increase in her age. The reason that a passenger survives should have nothing to do with that passengers gender. Another alarming trend that this study found was that there was a significant difference between the ticket classes in regards to the odds that a passenger survived (This can be seen in table 1). This is very troubling because how wealthy you are should not determine whether you live or die. Everyone, no matter how much money a passenger has, deserves an equal chance of survival.
+
+
+Conclusion: What happened to the Titanic was tragic, with hundreds of people dying. It is well documented that sinking of the Titanic resulted in wide changes to how large cruise ships operate. The biggest change that could have saved significantly more people was the new order that all boats must have enough lifeboats for all passengers. The events on the Titanic and the order in which passengers were evacuated in points to several issues that were present in the past. The way that human lives were valued in the past is unfair and unjust. People would favor the lives of rich people over poor people. Along with that the lives of females were considered more important to save. These kinds of beliefs are beliefs that as a society we need to work on. Although, they are not as present today as they were back then, there is still evidence that some of these views carry over to today. It is important for everyone's lives, no matter the gender or class, to to be valued the same. 
+
+
+
